@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(gxde-dlna-caster VERSION 1.1.0 LANGUAGES CXX)
+project(gxde-dlna-caster VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,6 +31,10 @@ set(HEADERS
 
 add_executable(gxde-dlna-caster ${SOURCES} ${HEADERS}
     assets/icons/gxde-dlna-caster.qrc)
+
+# 把版本号注入代码 (User-Agent / 应用版本)
+target_compile_definitions(gxde-dlna-caster PRIVATE
+    APP_VERSION="${PROJECT_VERSION}")
 
 target_link_libraries(gxde-dlna-caster PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network

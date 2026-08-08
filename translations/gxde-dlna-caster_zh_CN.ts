@@ -120,8 +120,8 @@
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="233"/>
-        <source>Media files (*.mp4 *.mkv *.avi *.mov *.ts *.flv *.mp3 *.wav *.aac *.m4a);;All files (*)</source>
-        <translation>媒体文件 (*.mp4 *.mkv *.avi *.mov *.ts *.flv *.mp3 *.wav *.aac *.m4a);;所有文件 (*)</translation>
+        <source>Media files (*.mp4 *.mkv *.avi *.mov *.ts *.flv *.webm *.mp3 *.wav *.flac *.aac *.m4a *.ogg *.jpg *.jpeg *.png *.bmp *.gif *.webp);;All files (*)</source>
+        <translation>媒体文件 (*.mp4 *.mkv *.avi *.mov *.ts *.flv *.webm *.mp3 *.wav *.flac *.aac *.m4a *.ogg *.jpg *.jpeg *.png *.bmp *.gif *.webp);;所有文件 (*)</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="258"/>

@@ -30,7 +30,11 @@ private slots:
     void onProcessFinished(int code, QProcess::ExitStatus status);
 
 private:
-    QStringList buildFfmpegArgs(const CastOptions &opts);
+    enum class MediaKind { Screen, Video, Audio, Image };
+
+    QStringList buildFfmpegArgs(const CastOptions &opts, MediaKind kind);
+    static MediaKind classifyFile(const QString &path);
+    static QString imageMime(const QString &path);
     QString detectMonitorSource();
     static QString findLanIp();
     static QString doubleRate(const QString &rate);

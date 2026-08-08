@@ -230,7 +230,7 @@ void MainWindow::onBrowseFile()
         this,
         tr("Select Media File"),
         QDir::homePath(),
-        tr("Media files (*.mp4 *.mkv *.avi *.mov *.ts *.flv *.mp3 *.wav *.aac *.m4a);;All files (*)"));
+        tr("Media files (*.mp4 *.mkv *.avi *.mov *.ts *.flv *.webm *.mp3 *.wav *.flac *.aac *.m4a *.ogg *.jpg *.jpeg *.png *.bmp *.gif *.webp);;All files (*)"));
     if (!path.isEmpty())
         m_fileEdit->setText(path);
 }

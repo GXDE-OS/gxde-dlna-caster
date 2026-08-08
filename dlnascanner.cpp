@@ -9,25 +9,18 @@
 static const QHostAddress kSsdpAddr = QHostAddress(QStringLiteral("239.255.255.250"));
 static constexpr quint16 kSsdpPort = 1900;
 
-// 精确搜索 MediaRenderer
-static const QByteArray kSearchMediaRenderer =
-    "M-SEARCH * HTTP/1.1\r\n"
-    "HOST: 239.255.255.250:1900\r\n"
-    "MAN: \"ssdp:discover\"\r\n"
-    "MX: 2\r\n"
-    "ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\n"
-    "USER-AGENT: DLNA-Caster/1.0\r\n"
-    "\r\n";
-
-// 兜底搜索全部 UPnP 设备 (兼容 MediaRenderer:2 / 厂商自定义类型, 靠 XML 过滤)
-static const QByteArray kSearchAll =
-    "M-SEARCH * HTTP/1.1\r\n"
-    "HOST: 239.255.255.250:1900\r\n"
-    "MAN: \"ssdp:discover\"\r\n"
-    "MX: 2\r\n"
-    "ST: ssdp:all\r\n"
-    "USER-AGENT: DLNA-Caster/1.0\r\n"
-    "\r\n";
+// 构造 M-SEARCH 报文 (User-Agent: "GXDE Caster <登录名>")
+static QByteArray searchMessage(const char *searchTarget)
+{
+    return QByteArray("M-SEARCH * HTTP/1.1\r\n"
+                      "HOST: 239.255.255.250:1900\r\n"
+                      "MAN: \"ssdp:discover\"\r\n"
+                      "MX: 2\r\n"
+                      "ST: ") +
+           searchTarget + "\r\n"
+           "USER-AGENT: " + gxdeUserAgent().toUtf8() + "\r\n"
+           "\r\n";
+}
 
 DlnaScanner::DlnaScanner(QObject *parent)
     : QObject(parent)
@@ -69,8 +62,9 @@ void DlnaScanner::startDiscovery(int timeoutMs)
                 continue;
             }
             connect(s, &QUdpSocket::readyRead, this, &DlnaScanner::onUdpReady);
-            s->writeDatagram(kSearchMediaRenderer, kSsdpAddr, kSsdpPort);
-            s->writeDatagram(kSearchAll, kSsdpAddr, kSsdpPort);
+            s->writeDatagram(searchMessage("urn:schemas-upnp-org:device:MediaRenderer:1"),
+                             kSsdpAddr, kSsdpPort);
+            s->writeDatagram(searchMessage("ssdp:all"), kSsdpAddr, kSsdpPort);
             m_socks << s;
             used << ip.toString();
         }
@@ -118,7 +112,7 @@ void DlnaScanner::startFetching()
             continue;
         m_fetching.insert(loc);
         QNetworkRequest req{QUrl(loc)};
-        req.setRawHeader("User-Agent", "DLNA-Caster/1.0");
+        req.setRawHeader("User-Agent", gxdeUserAgent().toUtf8());
         m_nam.get(req);
     }
     if (m_fetching.isEmpty())

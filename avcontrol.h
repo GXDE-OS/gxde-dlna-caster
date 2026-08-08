@@ -10,7 +10,9 @@ public:
     explicit AvControl(QObject *parent = nullptr);
 
     // 依次发送 SetAVTransportURI -> Play, 全部成功后发出 started()
-    void startCasting(const QString &controlUrl, const QString &uri);
+    // mime 为流内容类型, 如 video/mp2t / audio/mpeg / image/jpeg
+    void startCasting(const QString &controlUrl, const QString &uri,
+                      const QString &mime = QStringLiteral("video/mp2t"));
     void stop(const QString &controlUrl);
 
 signals:

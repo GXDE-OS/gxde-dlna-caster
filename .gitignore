@@ -1,8 +1,25 @@
 # 构建产物
 build/
 build-dtk6/
+obj-*/
 *.qm
 dist/
+
+# dpkg 打包临时文件
+debian/.debhelper/
+debian/files
+debian/*.substvars
+debian/*.debhelper
+debian/debhelper-build-stamp
+debian/tmp/
+*.deb
+*.ddeb
+*.build
+*.buildinfo
+*.changes
+*.dsc
+*.tar.gz
+*.tar.xz
 
 # 本地克隆的参考源码 (不纳入本仓库)
 dtk2widget-qt6/

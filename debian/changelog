@@ -1,3 +1,11 @@
+gxde-dlna-caster (1.2.0) UNRELEASED; urgency=medium
+
+  * User-Agent 使用 "GXDE Caster <登录名>"
+  * 支持投屏图片 (JPEG/PNG/BMP/GIF/WebP, 直接推送) 与音乐 (转码为 MP3)
+  * 关于对话框功能描述同步更新
+
+ -- shenmo <shenmo@spark-app.store>  Sat, 08 Aug 2026 19:10:00 +0800
+
 gxde-dlna-caster (1.1.0) UNRELEASED; urgency=medium
 
   * 记住上次的投屏参数 (投屏源/帧率/码率/端口/声音等), 下次启动自动恢复

@@ -26,6 +26,19 @@ void MediaServer::setStreamProcess(QProcess *proc)
             this, &MediaServer::onProcessFinished);
 }
 
+void MediaServer::setStaticFile(const QByteArray &data, const QString &mime)
+{
+    m_staticData = data;
+    m_staticMime = mime;
+    m_staticMode = !data.isEmpty();
+    setStreamProcess(nullptr);
+}
+
+void MediaServer::setStreamContentType(const QString &mime)
+{
+    m_streamMime = mime;
+}
+
 void MediaServer::stop()
 {
     for (Client &c : m_clients) {
@@ -76,8 +89,20 @@ void MediaServer::onClientReady()
 
         if (firstLine.contains("/stream")) {
             c.streaming = true;
+            if (m_staticMode) {
+                // 静态文件模式 (如图片): Content-Length 一次性返回
+                c.out += "HTTP/1.1 200 OK\r\n"
+                         "Content-Type: " + m_staticMime.toUtf8() + "\r\n"
+                         "Content-Length: " + QByteArray::number(m_staticData.size()) + "\r\n"
+                         "Cache-Control: no-cache, no-store\r\n"
+                         "Connection: close\r\n"
+                         "\r\n" + m_staticData;
+                pump(c);
+                closeClient(c);
+                return;
+            }
             c.out += "HTTP/1.1 200 OK\r\n"
-                     "Content-Type: video/mp2t\r\n"
+                     "Content-Type: " + m_streamMime.toUtf8() + "\r\n"
                      "Transfer-Encoding: chunked\r\n"
                      "Cache-Control: no-cache, no-store\r\n"
                      "Connection: close\r\n"
@@ -160,7 +185,8 @@ void MediaServer::pump(Client &c)
 
 void MediaServer::closeClient(Client &c)
 {
-    c.sock->disconnectFromHost();
+    // 先从列表移除, 再优雅关闭: 让 socket 把已写入的数据刷完后再断开,
+    // 断开后由 onClientDisconnected 负责 deleteLater, 避免数据被丢弃
     m_clients.remove(c.sock);
-    c.sock->deleteLater();
+    c.sock->disconnectFromHost();
 }

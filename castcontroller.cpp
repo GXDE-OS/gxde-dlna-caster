@@ -1,6 +1,8 @@
 #include "castcontroller.h"
 #include <QNetworkInterface>
 #include <QNetworkAddressEntry>
+#include <QFile>
+#include <QFileInfo>
 
 CastController::CastController(QObject *parent)
     : QObject(parent)
@@ -35,7 +37,11 @@ void CastController::startCasting(const Renderer &target, const CastOptions &opt
     m_target = target;
     m_casting = true;
 
-    if (opts.sourceFile.isEmpty() && qgetenv("DISPLAY").isEmpty()) {
+    MediaKind kind = MediaKind::Screen;
+    if (!opts.sourceFile.isEmpty())
+        kind = classifyFile(opts.sourceFile);
+
+    if (kind == MediaKind::Screen && qgetenv("DISPLAY").isEmpty()) {
         emit castError(QStringLiteral(
             "未检测到 X11 显示环境 (DISPLAY 为空), 无法采集桌面。\n请选择本地媒体文件作为投屏源。"));
         m_casting = false;
@@ -52,9 +58,39 @@ void CastController::startCasting(const Renderer &target, const CastOptions &opt
         return;
     }
 
+    // ===== 图片: 直接推送静态文件, 无需 ffmpeg =====
+    if (kind == MediaKind::Image) {
+        QFile f(opts.sourceFile);
+        if (!f.open(QIODevice::ReadOnly)) {
+            emit castError(QStringLiteral("无法读取图片文件: %1").arg(opts.sourceFile));
+            m_server.stop();
+            m_casting = false;
+            return;
+        }
+        const QString mime = imageMime(opts.sourceFile);
+        m_server.setStaticFile(f.readAll(), mime);
+        emit logMessage(QStringLiteral("图片模式: %1")
+                            .arg(QFileInfo(opts.sourceFile).fileName()));
+
+        if (previewOnly || !target.valid()) {
+            emit logMessage(QStringLiteral("预览模式: 未向设备发送指令"));
+            emit castStarted();
+            return;
+        }
+        emit logMessage(QStringLiteral("投屏目标: %1").arg(target.name));
+        m_av.startCasting(target.controlUrl, m_streamUrl, mime);
+        return;
+    }
+
+    // ===== 视频/桌面/音乐: ffmpeg 编码后流式输出 =====
+    const QString mime = (kind == MediaKind::Audio)
+                             ? QStringLiteral("audio/mpeg")
+                             : QStringLiteral("video/mp2t");
+    m_server.setStreamContentType(mime);
+
     m_proc = new QProcess(this);
     m_proc->setProgram("ffmpeg");
-    m_proc->setArguments(buildFfmpegArgs(opts));
+    m_proc->setArguments(buildFfmpegArgs(opts, kind));
     connect(m_proc, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this, &CastController::onProcessFinished);
     connect(m_proc, &QProcess::readyReadStandardError, this, [this]() {
@@ -64,7 +100,9 @@ void CastController::startCasting(const Renderer &target, const CastOptions &opt
     });
     m_server.setStreamProcess(m_proc);
 
-    emit logMessage(QStringLiteral("启动 ffmpeg 采集/编码 ..."));
+    emit logMessage(kind == MediaKind::Audio
+                        ? QStringLiteral("音乐模式: 转码为 MP3 ...")
+                        : QStringLiteral("启动 ffmpeg 采集/编码 ..."));
     m_proc->start();
     if (!m_proc->waitForStarted(3000)) {
         emit castError(QStringLiteral("ffmpeg 启动失败, 请确认已安装 ffmpeg (sudo apt install ffmpeg)"));
@@ -80,7 +118,7 @@ void CastController::startCasting(const Renderer &target, const CastOptions &opt
     }
 
     emit logMessage(QStringLiteral("投屏目标: %1").arg(target.name));
-    m_av.startCasting(target.controlUrl, m_streamUrl);
+    m_av.startCasting(target.controlUrl, m_streamUrl, mime);
 }
 
 void CastController::stopCasting()
@@ -101,6 +139,7 @@ void CastController::stopCasting()
     }
     m_server.stop();
     m_server.setStreamProcess(nullptr);
+    m_server.setStaticFile(QByteArray(), QString());
 
     emit logMessage(QStringLiteral("已停止投屏"));
     emit castStopped();
@@ -121,20 +160,30 @@ void CastController::onProcessFinished(int code, QProcess::ExitStatus)
     emit castStopped();
 }
 
-QStringList CastController::buildFfmpegArgs(const CastOptions &o)
+QStringList CastController::buildFfmpegArgs(const CastOptions &o, MediaKind kind)
 {
     QStringList a;
     a << "-hide_banner" << "-loglevel" << "warning" << "-y";
 
-    if (!o.sourceFile.isEmpty()) {
-        a << "-re" << "-i" << o.sourceFile;
-    } else {
+    if (kind == MediaKind::Screen) {
         a << "-f" << "x11grab"
           << "-framerate" << QString::number(o.fps)
           << "-draw_mouse" << "1"
           << "-i" << QString::fromUtf8(qgetenv("DISPLAY"));
         if (o.audio)
             a << "-f" << "pulse" << "-i" << detectMonitorSource();
+    } else {
+        a << "-re" << "-i" << o.sourceFile;
+    }
+
+    if (kind == MediaKind::Audio) {
+        // 仅音频: 转码为 MP3
+        a << "-vn"
+          << "-c:a" << "libmp3lame"
+          << "-b:a" << o.audioBitrate
+          << "-ar" << "44100" << "-ac" << "2"
+          << "-f" << "mp3" << "-";
+        return a;
     }
 
     if (o.scale > 0)
@@ -157,6 +206,32 @@ QStringList CastController::buildFfmpegArgs(const CastOptions &o)
 
     a << "-f" << "mpegts" << "-mpegts_flags" << "+resend_headers" << "-";
     return a;
+}
+
+CastController::MediaKind CastController::classifyFile(const QString &path)
+{
+    const QString ext = QFileInfo(path).suffix().toLower();
+    static const QStringList images = { "jpg", "jpeg", "png", "bmp", "gif", "webp" };
+    static const QStringList audios = { "mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "wma" };
+    if (images.contains(ext))
+        return MediaKind::Image;
+    if (audios.contains(ext))
+        return MediaKind::Audio;
+    return MediaKind::Video;
+}
+
+QString CastController::imageMime(const QString &path)
+{
+    const QString ext = QFileInfo(path).suffix().toLower();
+    if (ext == "png")
+        return QStringLiteral("image/png");
+    if (ext == "gif")
+        return QStringLiteral("image/gif");
+    if (ext == "bmp")
+        return QStringLiteral("image/bmp");
+    if (ext == "webp")
+        return QStringLiteral("image/webp");
+    return QStringLiteral("image/jpeg");
 }
 
 QString CastController::detectMonitorSource()

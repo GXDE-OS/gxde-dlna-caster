@@ -1,4 +1,5 @@
 #include "avcontrol.h"
+#include "renderer.h"
 #include <QNetworkReply>
 
 namespace {
@@ -57,12 +58,13 @@ void AvControl::post(const QString &controlUrl, const QString &action,
                   "text/xml; charset=\"utf-8\"");
     req.setRawHeader("SOAPAction",
                      QStringLiteral("\"%1#%2\"").arg(kAvTransport, action).toUtf8());
-    req.setRawHeader("User-Agent", "DLNA-Caster/1.0");
+    req.setRawHeader("User-Agent", gxdeUserAgent().toUtf8());
     req.setRawHeader("Connection", "close");
     m_nam.post(req, body.toUtf8());
 }
 
-void AvControl::startCasting(const QString &controlUrl, const QString &uri)
+void AvControl::startCasting(const QString &controlUrl, const QString &uri,
+                             const QString &mime)
 {
     m_controlUrl = controlUrl;
     m_chainSet = true;
@@ -73,9 +75,9 @@ void AvControl::startCasting(const QString &controlUrl, const QString &uri)
         "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" "
         "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">"
         "<item id=\"0\" parentID=\"-1\" restricted=\"1\">"
-        "<dc:title>DLNA-Caster 投屏</dc:title>"
-        "<res protocolInfo=\"http-get:*:video/mp2t:*\">%1</res>"
-        "</item></DIDL-Lite>").arg(uri);
+        "<dc:title>GXDE Caster</dc:title>"
+        "<res protocolInfo=\"http-get:*:%1:*\">%2</res>"
+        "</item></DIDL-Lite>").arg(mime, uri);
 
     post(m_controlUrl, "SetAVTransportURI", QStringList()
          << "InstanceID=0"

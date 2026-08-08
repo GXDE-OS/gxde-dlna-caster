@@ -120,7 +120,7 @@
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="233"/>
-        <source>Media files (*.mp4 *.mkv *.avi *.mov *.ts *.flv *.mp3 *.wav *.aac *.m4a);;All files (*)</source>
+        <source>Media files (*.mp4 *.mkv *.avi *.mov *.ts *.flv *.webm *.mp3 *.wav *.flac *.aac *.m4a *.ogg *.jpg *.jpeg *.png *.bmp *.gif *.webp);;All files (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
