@@ -11,9 +11,25 @@ int main(int argc, char *argv[])
     app.setOrganizationName(QStringLiteral("gxde"));
     app.setApplicationName(QStringLiteral("gxde-dlna-caster"));
     app.setApplicationDisplayName(QStringLiteral("GXDE DLNA Caster"));
-    app.setApplicationVersion(QStringLiteral("1.0.0"));
+    app.setApplicationVersion(QStringLiteral("1.1.0"));
+    app.setApplicationDescription(QStringLiteral(
+        "基于 Qt6 + DTK2 的 DLNA 投屏工具，通过 DLNA/UPnP 协议将桌面屏幕、"
+        "声音或本地媒体文件投送到电视。\n\n"
+        "主要功能:\n"
+        "- 自动发现局域网内的 DLNA 播放设备\n"
+        "- 实时投屏桌面画面与声音，或投屏本地媒体文件\n"
+        "- 多网卡 SSDP 扫描与本地预览\n"
+        "- 可调节帧率、码率与画面高度上限\n"
+        "- 记住上次使用的投屏参数"));
+    app.setApplicationAcknowledgementPage(QStringLiteral("https://gitee.com/GXDE-OS/gxde-dlna-caster"));
     app.loadTranslator();
-    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("gxde-dlna-caster")));
+
+    QIcon appIcon = QIcon::fromTheme(QStringLiteral("gxde-dlna-caster"));
+    if (appIcon.isNull())
+        appIcon = QIcon(QStringLiteral(":/icons/gxde-dlna-caster.png"));
+    app.setWindowIcon(appIcon);
+    app.setProductName(QStringLiteral("GXDE DLNA Caster"));
+    app.setProductIcon(appIcon);
 
     MainWindow w;
     w.resize(900, 580);

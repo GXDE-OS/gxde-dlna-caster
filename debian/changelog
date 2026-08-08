@@ -1,3 +1,10 @@
+gxde-dlna-caster (1.1.0) UNRELEASED; urgency=medium
+
+  * 记住上次的投屏参数 (投屏源/帧率/码率/端口/声音等), 下次启动自动恢复
+  * 关于对话框展示 Logo 与功能描述 (使用 DTK 默认关于入口)
+
+ -- shenmo <shenmo@spark-app.store>  Sat, 08 Aug 2026 18:40:00 +0800
+
 gxde-dlna-caster (1.0.0) UNRELEASED; urgency=medium
 
   * 首个版本: 通过 DLNA/UPnP 协议把桌面屏幕、声音或本地媒体文件

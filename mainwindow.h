@@ -24,6 +24,9 @@ class MainWindow : public DMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
 
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
 private slots:
     void onRefreshDevices();
     void onSourceChanged(int index);
@@ -42,9 +45,12 @@ private:
     void appendLog(const QString &msg);
     void setCastingUi(bool casting);
     CastOptions collectOptions() const;
+    void loadSettings();
+    void saveSettings();
 
     DlnaScanner m_scanner;
     CastController m_controller;
+    bool m_loadingSettings = false;
     DListView *m_deviceList = nullptr;
     QStandardItemModel *m_deviceModel = nullptr;
     QComboBox *m_sourceCombo = nullptr;

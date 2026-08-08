@@ -15,6 +15,8 @@
 #include <QTimer>
 #include <QIcon>
 #include <QStandardItem>
+#include <QSettings>
+#include <QCloseEvent>
 
 MainWindow::MainWindow(QWidget *parent)
     : DMainWindow(parent)
@@ -112,6 +114,20 @@ void MainWindow::buildUi()
     m_audioCheck = new QCheckBox(tr("Capture and send desktop audio"), optsGroup);
     m_audioCheck->setChecked(true);
 
+    // 参数变化时自动记住
+    connect(m_sourceCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int) { saveSettings(); });
+    connect(m_fileEdit, &QLineEdit::textChanged, this, [this](const QString &) { saveSettings(); });
+    connect(m_fpsSpin, qOverload<int>(&QSpinBox::valueChanged),
+            this, [this](int) { saveSettings(); });
+    connect(m_scaleSpin, qOverload<int>(&QSpinBox::valueChanged),
+            this, [this](int) { saveSettings(); });
+    connect(m_bitrateCombo, &QComboBox::currentTextChanged,
+            this, [this](const QString &) { saveSettings(); });
+    connect(m_portSpin, qOverload<int>(&QSpinBox::valueChanged),
+            this, [this](int) { saveSettings(); });
+    connect(m_audioCheck, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
+
     form->addRow(tr("Source"), m_sourceCombo);
     form->addRow(tr("Media file"), fileRowWidget);
     form->addRow(tr("Frame rate"), m_fpsSpin);
@@ -152,7 +168,7 @@ void MainWindow::buildUi()
     setCentralWidget(central);
     titlebar()->setTitle(tr("GXDE DLNA Caster"));
 
-    onSourceChanged(0);
+    loadSettings();
 }
 
 void MainWindow::onRefreshDevices()
@@ -168,6 +184,44 @@ void MainWindow::onSourceChanged(int index)
     const bool fileMode = (index == 1);
     m_fileEdit->setEnabled(fileMode);
     m_browseBtn->setEnabled(fileMode);
+}
+
+void MainWindow::loadSettings()
+{
+    QSettings s;
+    m_loadingSettings = true;
+    m_sourceCombo->setCurrentIndex(s.value(QStringLiteral("source"), 0).toInt());
+    m_fileEdit->setText(s.value(QStringLiteral("file")).toString());
+    m_fpsSpin->setValue(s.value(QStringLiteral("fps"), 30).toInt());
+    m_scaleSpin->setValue(s.value(QStringLiteral("scale"), 1080).toInt());
+    const QString bitrate = s.value(QStringLiteral("bitrate"), QStringLiteral("4M")).toString();
+    if (m_bitrateCombo->findText(bitrate) >= 0)
+        m_bitrateCombo->setCurrentText(bitrate);
+    m_portSpin->setValue(s.value(QStringLiteral("port"), 8090).toInt());
+    m_audioCheck->setChecked(s.value(QStringLiteral("audio"), true).toBool());
+    m_loadingSettings = false;
+    onSourceChanged(m_sourceCombo->currentIndex());
+}
+
+void MainWindow::saveSettings()
+{
+    if (m_loadingSettings)
+        return;
+    QSettings s;
+    s.setValue(QStringLiteral("source"), m_sourceCombo->currentIndex());
+    s.setValue(QStringLiteral("file"), m_fileEdit->text());
+    s.setValue(QStringLiteral("fps"), m_fpsSpin->value());
+    s.setValue(QStringLiteral("scale"), m_scaleSpin->value());
+    s.setValue(QStringLiteral("bitrate"), m_bitrateCombo->currentText());
+    s.setValue(QStringLiteral("port"), m_portSpin->value());
+    s.setValue(QStringLiteral("audio"), m_audioCheck->isChecked());
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    saveSettings();
+    m_controller.stopCasting();
+    DMainWindow::closeEvent(event);
 }
 
 void MainWindow::onBrowseFile()

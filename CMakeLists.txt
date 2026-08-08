@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
-project(gxde-dlna-caster VERSION 1.0.0 LANGUAGES CXX)
+project(gxde-dlna-caster VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 # Qt6 版 DTK2 (libdtk2widget6) + dtk6core / dtk6gui
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network LinguistTools)
@@ -28,7 +29,8 @@ set(HEADERS
     renderer.h
 )
 
-add_executable(gxde-dlna-caster ${SOURCES} ${HEADERS})
+add_executable(gxde-dlna-caster ${SOURCES} ${HEADERS}
+    assets/icons/gxde-dlna-caster.qrc)
 
 target_link_libraries(gxde-dlna-caster PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
@@ -82,5 +84,5 @@ install(FILES ${QM_FILES}
         DESTINATION share/gxde-dlna-caster/translations)
 install(FILES application/gxde-dlna-caster.desktop
         DESTINATION share/applications)
-install(FILES assets/icons/gxde-dlna-caster.svg
-        DESTINATION share/icons/hicolor/scalable/apps)
+install(FILES assets/icons/gxde-dlna-caster.png
+        DESTINATION share/icons/hicolor/512x512/apps)
