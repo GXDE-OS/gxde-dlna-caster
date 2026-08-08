@@ -1,0 +1,7 @@
+gxde-dlna-caster (1.0.0) UNRELEASED; urgency=medium
+
+  * 首个版本: 通过 DLNA/UPnP 协议把桌面屏幕、声音或本地媒体文件
+    投屏到电视/机顶盒等 DLNA 接收端。
+  * 自动发现局域网设备、逐网卡 SSDP 探测、本地预览、国际化支持。
+
+ -- gfdgd xi <3025613752@qq.com>  Sat, 08 Aug 2026 18:00:00 +0800

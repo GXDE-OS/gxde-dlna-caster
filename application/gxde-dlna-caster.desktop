@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=GXDE DLNA Caster
+Name[zh_CN]=GXDE投屏工具
+Name[zh_HK]=GXDE投屏工具
+Name[zh_TW]=GXDE投屏工具
+GenericName=DLNA Cast
+GenericName[zh_CN]=DLNA投屏
+GenericName[zh_HK]=DLNA投屏
+GenericName[zh_TW]=DLNA投屏
+Comment=Cast desktop screen and audio to DLNA TVs
+Comment[zh_CN]=将桌面屏幕、声音或本地媒体投屏到 DLNA 电视
+Comment[zh_HK]=將桌面畫面、聲音或本機媒體投屏到 DLNA 電視
+Comment[zh_TW]=將桌面畫面、聲音或本機媒體投屏到 DLNA 電視
+Exec=gxde-dlna-caster
+Icon=gxde-dlna-caster
+Terminal=false
+Categories=AudioVideo;Video;Player;
+Keywords=DLNA;Cast;Screen;投屏;
+StartupNotify=false
+X-GNOME-UsesNotifications=false

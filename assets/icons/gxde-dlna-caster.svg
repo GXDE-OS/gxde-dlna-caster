@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4fb3ff"/>
+      <stop offset="1" stop-color="#1472e6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 电视外壳 -->
+  <rect x="13" y="22" width="102" height="76" rx="16" fill="#1c2430"/>
+  <!-- 底座 -->
+  <path d="M49 98 h30 v5 h-30 z" fill="#1c2430"/>
+
+  <!-- 屏幕 -->
+  <rect x="19" y="28" width="90" height="64" rx="10" fill="url(#screen)"/>
+
+  <!-- 投屏信号: 接收器 + 波纹 (Android cast 风格) -->
+  <g fill="#ffffff" stroke="#ffffff" stroke-linecap="round" fill-opacity="1">
+    <!-- 接收器 -->
+    <rect x="38" y="68" width="14" height="10" rx="2.5" fill="#ffffff" stroke="none"/>
+    <!-- 波纹 -->
+    <path d="M53 78 a9 9 0 0 0 -9 -9" fill="none" stroke-width="4.5"/>
+    <path d="M62 78 a18 18 0 0 0 -18 -18" fill="none" stroke-width="4.5"/>
+    <circle cx="44" cy="78" r="3" fill="#ffffff" stroke="none"/>
+  </g>
+</svg>

@@ -1,0 +1,16 @@
+# 构建产物
+build/
+build-dtk6/
+*.qm
+dist/
+
+# 本地克隆的参考源码 (不纳入本仓库)
+dtk2widget-qt6/
+gxde-music/
+
+# 编辑器 / 系统
+*.user
+.vscode
+.idea
+__pycache__/
+*.pyc
