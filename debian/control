@@ -1,7 +1,7 @@
 Source: gxde-dlna-caster
 Section: video
 Priority: optional
-Maintainer: gfdgd xi <3025613752@qq.com>
+Maintainer: shenmo <shenmo@spark-app.store>
 Build-Depends: debhelper (>= 13),
  cmake,
  pkg-config,
