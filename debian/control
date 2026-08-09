@@ -11,7 +11,8 @@ Build-Depends: debhelper (>= 13),
  libdtk2widget6-dev,
  libdtk6core-dev,
  libdtk6gui-dev,
- libdtk6log-dev
+ libdtk6log-dev,
+ libpipewire-0.3-dev
 Standards-Version: 3.9.8
 Homepage: https://github.com/GXDE-OS/gxde-dlna-caster
 
