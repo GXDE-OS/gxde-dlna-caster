@@ -4,6 +4,7 @@
 #include "renderer.h"
 #include "mediaserver.h"
 #include "avcontrol.h"
+#include "browserserver.h"
 
 // 投屏控制: 负责 ffmpeg 进程、流服务、SOAP 指令的编排
 class CastController : public QObject
@@ -15,9 +16,13 @@ public:
 
     bool isCasting() const { return m_casting; }
     QString streamUrl() const { return m_streamUrl; }
+    // 浏览器投屏所有网卡可访问的地址 (可能多个, 接收方任选其一打开)
+    QStringList browserUrls() const { return m_browserUrls; }
+    bool isBrowserMode() const { return m_mode == Mode::Browser; }
 
     void startCasting(const Renderer &target, const CastOptions &opts,
                       bool previewOnly);
+    void startBrowserCasting(const CastOptions &opts);
     void stopCasting();
 
 signals:
@@ -31,18 +36,26 @@ private slots:
 
 private:
     enum class MediaKind { Screen, Video, Audio, Image };
+    enum class Mode { None, Dlna, Browser };
 
-    QStringList buildFfmpegArgs(const CastOptions &opts, MediaKind kind);
+    QStringList buildFfmpegArgs(const CastOptions &opts, MediaKind kind, bool browser);
     static MediaKind classifyFile(const QString &path);
     static QString imageMime(const QString &path);
+    static bool hasAudioTrack(const QString &file);
+    // 用 ffprobe 获取视频宽高, 失败返回 (0,0)
+    static bool getMediaDimensions(const QString &file, int &width, int &height);
     QString detectMonitorSource();
+    static QStringList findLanIps();
     static QString findLanIp();
     static QString doubleRate(const QString &rate);
 
     QProcess *m_proc = nullptr;
     MediaServer m_server;
+    BrowserServer m_browserServer;
     AvControl m_av;
     Renderer m_target;
     QString m_streamUrl;
+    QStringList m_browserUrls;
+    Mode m_mode = Mode::None;
     bool m_casting = false;
 };

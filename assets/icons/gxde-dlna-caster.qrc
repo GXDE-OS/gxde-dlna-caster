@@ -2,4 +2,7 @@
     <qresource prefix="/icons">
         <file alias="gxde-dlna-caster.png">gxde-dlna-caster.png</file>
     </qresource>
+    <qresource prefix="/mpegts">
+        <file alias="mpegts.js">../mpegts/mpegts.js</file>
+    </qresource>
 </RCC>

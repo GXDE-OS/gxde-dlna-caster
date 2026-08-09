@@ -12,6 +12,8 @@ debian/*.substvars
 debian/*.debhelper
 debian/debhelper-build-stamp
 debian/tmp/
+debian/gxde-dlna-caster.debhelper.log
+debian/gxde-dlna-caster/
 *.deb
 *.ddeb
 *.build

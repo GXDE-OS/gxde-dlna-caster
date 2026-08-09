@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(gxde-dlna-caster VERSION 1.2.0 LANGUAGES CXX)
+project(gxde-dlna-caster VERSION 1.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # Qt6 版 DTK2 (libdtk2widget6) + dtk6core / dtk6gui
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network LinguistTools)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network WebSockets LinguistTools)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(DTK2 REQUIRED IMPORTED_TARGET dtk2widget dtk6gui dtk6core dtk6log)
 
@@ -18,6 +18,7 @@ set(SOURCES
     avcontrol.cpp
     mediaserver.cpp
     castcontroller.cpp
+    browserserver.cpp
 )
 
 set(HEADERS
@@ -26,6 +27,7 @@ set(HEADERS
     avcontrol.h
     mediaserver.h
     castcontroller.h
+    browserserver.h
     renderer.h
 )
 
@@ -37,7 +39,7 @@ target_compile_definitions(gxde-dlna-caster PRIVATE
     APP_VERSION="${PROJECT_VERSION}")
 
 target_link_libraries(gxde-dlna-caster PRIVATE
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::WebSockets
     PkgConfig::DTK2
 )
 

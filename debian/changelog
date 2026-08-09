@@ -1,3 +1,23 @@
+gxde-dlna-caster (1.4.0) UNRELEASED; urgency=medium
+
+  * 浏览器投屏改用 mpegts.js 播放 MPEG-TS 流 (播放器打包在本地资源中),
+    修复 Firefox 打开无法加载流的问题, 兼容 Chrome/Firefox/电视浏览器
+  * 视频与图片依照源文件宽高比自适应显示, 不再强制拉伸
+  * 图片投屏时隐藏视频窗口
+  * 标题栏菜单 (DTK 自带菜单) 新增"启用系统托盘"选项
+  * 首次关闭窗口时弹窗询问"最小化到托盘 / 直接退出", 可记住选择不再询问
+
+ -- shenmo <shenmo@spark-app.store>  Sun, 09 Aug 2026 16:30:00 +0800
+
+gxde-dlna-caster (1.3.0) UNRELEASED; urgency=medium
+
+  * 新增浏览器投屏: 接收方打开浏览器即可观看投屏 (无需安装接收端),
+    基于 Qt6 WebSockets + MSE (fMP4), 支持桌面/视频/音乐/图片
+  * 界面重新设计: 左侧导航 (DLNA 投屏 / 浏览器投屏) + 现代卡片式布局
+  * 新增编译依赖 qt6-websockets-dev
+
+ -- shenmo <shenmo@spark-app.store>  Sat, 09 Aug 2026 12:00:00 +0800
+
 gxde-dlna-caster (1.2.0) UNRELEASED; urgency=medium
 
   * User-Agent 使用 "GXDE Caster <登录名>"
