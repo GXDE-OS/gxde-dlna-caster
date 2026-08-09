@@ -6,6 +6,9 @@
 #include <QImageReader>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QTemporaryDir>
+#include <unistd.h>
+#include <sys/stat.h>
 
 CastController::CastController(QObject *parent)
     : QObject(parent)
@@ -45,22 +48,14 @@ void CastController::startCasting(const Renderer &target, const CastOptions &opt
     if (!opts.sourceFile.isEmpty())
         kind = classifyFile(opts.sourceFile);
 
-    if (kind == MediaKind::Screen) {
-        if (isWaylandSession()) {
-            if (!ffmpegSupportsPipewire()) {
-                emit castError(QStringLiteral(
-                    "检测到 Wayland 会话, 桌面采集需要 ffmpeg 支持 PipeWire。\n"
-                    "当前 ffmpeg 未编译 PipeWire 输入设备 (需要 ffmpeg >= 5.1 且 --enable-libpipewire)。\n"
-                    "请升级 ffmpeg 或选择本地媒体文件作为投屏源。"));
-                m_casting = false;
-                return;
-            }
-        } else if (qgetenv("DISPLAY").isEmpty()) {
-            emit castError(QStringLiteral(
-                "未检测到 X11 显示环境 (DISPLAY 为空), 无法采集桌面。\n请选择本地媒体文件作为投屏源。"));
-            m_casting = false;
-            return;
-        }
+    // Wayland 桌面采集统一通过 xdg-desktop-portal 授权 (见 startScreenCaptureAsync),
+    // 不再依赖 ffmpeg 是否编译 PipeWire 输入设备
+    if (kind == MediaKind::Screen && !isWaylandSession()
+        && qgetenv("DISPLAY").isEmpty()) {
+        emit castError(QStringLiteral(
+            "未检测到 X11 显示环境 (DISPLAY 为空), 无法采集桌面。\n请选择本地媒体文件作为投屏源。"));
+        m_casting = false;
+        return;
     }
 
     const QString ip = findLanIp();
@@ -102,6 +97,16 @@ void CastController::startCasting(const Renderer &target, const CastOptions &opt
                              ? QStringLiteral("audio/mpeg")
                              : QStringLiteral("video/mp2t");
     m_server.setStreamContentType(mime);
+
+    // Wayland 会话桌面采集: 统一走 portal + libpipewire 异步采集
+    if (kind == MediaKind::Screen && isWaylandSession()) {
+        m_pendingTarget = target;
+        m_pendingOpts = opts;
+        m_pendingPreview = previewOnly;
+        m_pendingBrowser = false;
+        startScreenCaptureAsync(opts, false);
+        return;
+    }
 
     m_proc = new QProcess(this);
     m_proc->setProgram("ffmpeg");
@@ -148,24 +153,15 @@ void CastController::startBrowserCasting(const CastOptions &opts)
     if (!opts.sourceFile.isEmpty())
         kind = classifyFile(opts.sourceFile);
 
-    if (kind == MediaKind::Screen) {
-        if (isWaylandSession()) {
-            if (!ffmpegSupportsPipewire()) {
-                emit castError(QStringLiteral(
-                    "检测到 Wayland 会话, 桌面采集需要 ffmpeg 支持 PipeWire。\n"
-                    "当前 ffmpeg 未编译 PipeWire 输入设备 (需要 ffmpeg >= 5.1 且 --enable-libpipewire)。\n"
-                    "请升级 ffmpeg 或选择本地媒体文件作为投屏源。"));
-                m_casting = false;
-                m_mode = Mode::None;
-                return;
-            }
-        } else if (qgetenv("DISPLAY").isEmpty()) {
-            emit castError(QStringLiteral(
-                "未检测到 X11 显示环境 (DISPLAY 为空), 无法采集桌面。\n请选择本地媒体文件作为投屏源。"));
-            m_casting = false;
-            m_mode = Mode::None;
-            return;
-        }
+    // Wayland 桌面采集统一通过 xdg-desktop-portal 授权 (见 startScreenCaptureAsync),
+    // 不再依赖 ffmpeg 是否编译 PipeWire 输入设备
+    if (kind == MediaKind::Screen && !isWaylandSession()
+        && qgetenv("DISPLAY").isEmpty()) {
+        emit castError(QStringLiteral(
+            "未检测到 X11 显示环境 (DISPLAY 为空), 无法采集桌面。\n请选择本地媒体文件作为投屏源。"));
+        m_casting = false;
+        m_mode = Mode::None;
+        return;
     }
 
     // 浏览器投屏监听所有网卡, 生成每个网卡对应的访问地址 (接收方任选其一)
@@ -253,6 +249,16 @@ void CastController::startBrowserCasting(const CastOptions &opts)
     }
     m_browserServer.setMediaInfo(type, mime, outW, outH);
 
+    // Wayland 会话桌面采集: 统一走 portal + libpipewire 异步采集
+    if (kind == MediaKind::Screen && isWaylandSession()) {
+        m_pendingTarget = Renderer();
+        m_pendingOpts = eff;
+        m_pendingPreview = true;
+        m_pendingBrowser = true;
+        startScreenCaptureAsync(eff, true);
+        return;
+    }
+
     m_proc = new QProcess(this);
     m_proc->setProgram("ffmpeg");
     m_proc->setArguments(buildFfmpegArgs(eff, kind, true));
@@ -288,6 +294,9 @@ void CastController::stopCasting()
     if (m_mode == Mode::Dlna && m_target.valid())
         m_av.stop(m_target.controlUrl);
 
+    // 先停止 Wayland 采集 (解除 FIFO 写阻塞), 再停 ffmpeg
+    m_pwCapture.stopCapture();
+
     if (m_proc) {
         m_proc->terminate();
         if (!m_proc->waitForFinished(2000))
@@ -301,6 +310,10 @@ void CastController::stopCasting()
     m_server.setStaticFile(QByteArray(), QString());
     m_browserServer.setStreamProcess(nullptr);
     m_browserUrls.clear();
+    // 清理采集 FIFO
+    m_captureDir.reset();
+    m_captureFifo.clear();
+    m_captureReady = false;
     m_mode = Mode::None;
 
     emit logMessage(QStringLiteral("已停止投屏"));
@@ -319,11 +332,15 @@ void CastController::onProcessFinished(int code, QProcess::ExitStatus)
     }
     emit logMessage(QStringLiteral("ffmpeg 已退出 (code %1)").arg(code));
     // ffmpeg 结束(自然播完/异常)时同样释放所有服务与端口, 避免残留占用
+    m_pwCapture.stopCapture();
     m_server.stop();
     m_browserServer.stop();
     m_server.setStreamProcess(nullptr);
     m_browserServer.setStreamProcess(nullptr);
     m_browserUrls.clear();
+    m_captureDir.reset();
+    m_captureFifo.clear();
+    m_captureReady = false;
     m_mode = Mode::None;
     emit castStopped();
 }
@@ -335,15 +352,12 @@ QStringList CastController::buildFfmpegArgs(const CastOptions &o, MediaKind kind
     a << "-hide_banner" << "-loglevel" << "warning" << "-y";
 
     if (kind == MediaKind::Screen) {
-        if (isWaylandSession()) {
-            // Wayland: 通过 PipeWire 采集桌面 (ffmpeg >= 5.1, 需 --enable-libpipewire)
-            a << "-f" << "pipewire" << "-i" << "0";
-        } else {
-            a << "-f" << "x11grab"
-              << "-framerate" << QString::number(o.fps)
-              << "-draw_mouse" << "1"
-              << "-i" << QString::fromUtf8(qgetenv("DISPLAY"));
-        }
+        // Wayland 桌面采集统一走 xdg-desktop-portal (startScreenCaptureAsync),
+        // 此处只处理 X11 直接采集
+        a << "-f" << "x11grab"
+          << "-framerate" << QString::number(o.fps)
+          << "-draw_mouse" << "1"
+          << "-i" << QString::fromUtf8(qgetenv("DISPLAY"));
         // 音频: PipeWire 提供 pulse 兼容层, 继续使用 pulse 采集系统声音
         if (o.audio)
             a << "-f" << "pulse" << "-i" << detectMonitorSource();
@@ -534,13 +548,119 @@ bool CastController::isWaylandSession()
     return false;
 }
 
-bool CastController::ffmpegSupportsPipewire()
+// Wayland 桌面采集: 通过 portal ScreenCast 授权 + libpipewire 拉帧
+// 帧写入 FIFO, ffmpeg 以 -f rawvideo 读取 (在协商出分辨率后异步启动)
+void CastController::startScreenCaptureAsync(const CastOptions &opts, bool browser)
 {
-    QProcess p;
-    p.start("ffmpeg", QStringList() << "-hide_banner" << "-devices");
-    if (!p.waitForFinished(3000))
-        return false;
-    const QString out = QString::fromUtf8(p.readAllStandardOutput())
-                        + QString::fromUtf8(p.readAllStandardError());
-    return out.contains(QStringLiteral("pipewire"));
+    // 创建临时目录与 FIFO (ffmpeg 将作为读端打开)
+    m_captureDir = std::make_unique<QTemporaryDir>();
+    if (!m_captureDir->isValid()) {
+        emit castError(QStringLiteral("无法创建采集临时目录"));
+        m_casting = false;
+        m_mode = Mode::None;
+        return;
+    }
+    m_captureFifo = m_captureDir->filePath(QStringLiteral("capture.fifo"));
+    if (::mkfifo(m_captureFifo.toUtf8().constData(), 0600) != 0) {
+        emit castError(QStringLiteral("无法创建采集管道 (mkfifo 失败)"));
+        m_casting = false;
+        m_mode = Mode::None;
+        return;
+    }
+
+    m_captureFps = qBound(1, opts.fps, 120);
+    m_captureReady = false;
+    disconnect(&m_pwCapture, nullptr, this, nullptr);
+    connect(&m_pwCapture, &PipeWireCapture::resolutionReady,
+            this, &CastController::onCaptureResolution);
+    connect(&m_pwCapture, &PipeWireCapture::captureError,
+            this, [this](const QString &msg) {
+        emit castError(QStringLiteral("桌面采集失败: %1").arg(msg));
+        stopCasting();
+    });
+    emit logMessage(QStringLiteral("Wayland 桌面采集: 等待系统授权窗口..."));
+    m_pwCapture.startCapture(m_captureFifo, m_captureFps);
+}
+
+void CastController::onCaptureResolution(int w, int h)
+{
+    if (!m_casting || m_captureReady || w <= 0 || h <= 0)
+        return;
+    m_captureReady = true;
+    const CastOptions &o = m_pendingOpts;
+
+    // 计算输出分辨率 (scale 高度上限)
+    int outW = w, outH = h;
+    if (o.scale > 0 && outH > o.scale) {
+        const double ratio = double(o.scale) / double(outH);
+        outH = o.scale;
+        outW = int(double(outW) * ratio);
+        if (outW % 2 != 0) outW += 1;
+    }
+
+    // 浏览器模式: 更新媒体宽高信息
+    if (m_pendingBrowser)
+        m_browserServer.setMediaInfo(QStringLiteral("video"),
+                                     QStringLiteral("video/mp2t"), outW, outH);
+
+    // ffmpeg: rawvideo(FIFO) + pulse 音频 -> MPEG-TS
+    QStringList args;
+    args << "-hide_banner" << "-loglevel" << "warning" << "-y"
+         << "-f" << "rawvideo" << "-pix_fmt" << "bgra"
+         << "-s" << QStringLiteral("%1x%2").arg(w).arg(h)
+         << "-framerate" << QString::number(m_captureFps)
+         << "-i" << m_captureFifo;
+    if (o.audio)
+        args << "-f" << "pulse" << "-i" << detectMonitorSource();
+    if (o.scale > 0 && outH != h)
+        args << "-vf" << QStringLiteral("scale=-2:%1").arg(o.scale);
+    args << "-c:v" << "libx264" << "-preset" << "veryfast"
+         << "-tune" << "zerolatency" << "-pix_fmt" << "yuv420p"
+         << "-b:v" << o.bitrate
+         << "-maxrate" << o.bitrate
+         << "-bufsize" << doubleRate(o.bitrate)
+         << "-g" << "30" << "-keyint_min" << "30" << "-sc_threshold" << "0";
+    if (o.audio)
+        args << "-c:a" << "aac" << "-b:a" << o.audioBitrate
+             << "-ar" << "44100" << "-ac" << "2";
+    else
+        args << "-an";
+    args << "-f" << "mpegts" << "-mpegts_flags" << "+resend_headers" << "-";
+
+    m_proc = new QProcess(this);
+    m_proc->setProgram("ffmpeg");
+    m_proc->setArguments(args);
+    connect(m_proc, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, &CastController::onProcessFinished);
+    connect(m_proc, &QProcess::readyReadStandardError, this, [this]() {
+        const QByteArray err = m_proc->readAllStandardError();
+        if (!err.trimmed().isEmpty())
+            emit logMessage(QStringLiteral("[ffmpeg] %1").arg(QString::fromUtf8(err).trimmed()));
+    });
+    if (m_pendingBrowser)
+        m_browserServer.setStreamProcess(m_proc);
+    else
+        m_server.setStreamProcess(m_proc);
+
+    emit logMessage(QStringLiteral("启动 ffmpeg 编码 (Wayland 桌面, %1x%2) ...")
+                        .arg(outW).arg(outH));
+    m_proc->start();
+    if (!m_proc->waitForStarted(3000)) {
+        emit castError(QStringLiteral("ffmpeg 启动失败, 请确认已安装 ffmpeg (sudo apt install ffmpeg)"));
+        stopCasting();
+        return;
+    }
+
+    if (m_pendingBrowser) {
+        emit logMessage(QStringLiteral("浏览器投屏已开始: 在接收设备浏览器中打开 %1")
+                            .arg(m_streamUrl));
+        emit castStarted();
+    } else if (m_pendingPreview || !m_pendingTarget.valid()) {
+        emit logMessage(QStringLiteral("预览模式: 未向设备发送指令, 可用 VLC 打开上面的流地址预览"));
+        emit castStarted();
+    } else {
+        emit logMessage(QStringLiteral("投屏目标: %1").arg(m_pendingTarget.name));
+        m_av.startCasting(m_pendingTarget.controlUrl, m_streamUrl,
+                          QStringLiteral("video/mp2t"));
+    }
 }

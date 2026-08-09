@@ -1,3 +1,12 @@
+gxde-dlna-caster (1.5.1) UNRELEASED; urgency=medium
+
+  * Wayland 桌面采集统一通过 xdg-desktop-portal 授权 (portal ScreenCast),
+    使用 libpipewire 拉取原始帧交给 ffmpeg 编码, 不再直接使用
+    ffmpeg -f pipewire; 所有合成器 (GNOME/KDE/wlroots) 稳定可用
+  * 移除对 ffmpeg 是否编译 PipeWire 输入设备的依赖
+
+ -- shenmo <shenmo@spark-app.store>  Sun, 09 Aug 2026 16:47:00 +0800
+
 gxde-dlna-caster (1.5.0) UNRELEASED; urgency=medium
 
   * Wayland 会话下桌面采集改用 PipeWire 方式 (ffmpeg -f pipewire),

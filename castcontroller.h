@@ -1,10 +1,14 @@
 #pragma once
 #include <QObject>
 #include <QProcess>
+#include <memory>
 #include "renderer.h"
 #include "mediaserver.h"
 #include "avcontrol.h"
 #include "browserserver.h"
+#include "pipewirecapture.h"
+
+class QTemporaryDir;
 
 // 投屏控制: 负责 ffmpeg 进程、流服务、SOAP 指令的编排
 class CastController : public QObject
@@ -44,10 +48,11 @@ private:
     static bool hasAudioTrack(const QString &file);
     // 用 ffprobe 获取视频宽高, 失败返回 (0,0)
     static bool getMediaDimensions(const QString &file, int &width, int &height);
-    // 检测当前会话是否为 Wayland (此时桌面采集需使用 PipeWire)
+    // 检测当前会话是否为 Wayland (此时桌面采集需走 xdg-desktop-portal)
     static bool isWaylandSession();
-    // 检测 ffmpeg 是否编译了 PipeWire 输入设备 (ffmpeg >= 5.1 --enable-libpipewire)
-    static bool ffmpegSupportsPipewire();
+    // Wayland 桌面采集: 通过 portal + libpipewire 拉取桌面帧交给 ffmpeg (rawvideo FIFO)
+    void startScreenCaptureAsync(const CastOptions &opts, bool browser);
+    void onCaptureResolution(int width, int height);
     QString detectMonitorSource();
     static QStringList findLanIps();
     static QString findLanIp();
@@ -62,4 +67,15 @@ private:
     QStringList m_browserUrls;
     Mode m_mode = Mode::None;
     bool m_casting = false;
+
+    // Wayland 桌面采集 (portal + libpipewire) 状态
+    PipeWireCapture m_pwCapture;
+    std::unique_ptr<QTemporaryDir> m_captureDir;
+    QString m_captureFifo;
+    int m_captureFps = 30;
+    bool m_captureReady = false;
+    Renderer m_pendingTarget;
+    CastOptions m_pendingOpts;
+    bool m_pendingPreview = false;
+    bool m_pendingBrowser = false;
 };
