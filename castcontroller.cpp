@@ -45,11 +45,22 @@ void CastController::startCasting(const Renderer &target, const CastOptions &opt
     if (!opts.sourceFile.isEmpty())
         kind = classifyFile(opts.sourceFile);
 
-    if (kind == MediaKind::Screen && qgetenv("DISPLAY").isEmpty()) {
-        emit castError(QStringLiteral(
-            "未检测到 X11 显示环境 (DISPLAY 为空), 无法采集桌面。\n请选择本地媒体文件作为投屏源。"));
-        m_casting = false;
-        return;
+    if (kind == MediaKind::Screen) {
+        if (isWaylandSession()) {
+            if (!ffmpegSupportsPipewire()) {
+                emit castError(QStringLiteral(
+                    "检测到 Wayland 会话, 桌面采集需要 ffmpeg 支持 PipeWire。\n"
+                    "当前 ffmpeg 未编译 PipeWire 输入设备 (需要 ffmpeg >= 5.1 且 --enable-libpipewire)。\n"
+                    "请升级 ffmpeg 或选择本地媒体文件作为投屏源。"));
+                m_casting = false;
+                return;
+            }
+        } else if (qgetenv("DISPLAY").isEmpty()) {
+            emit castError(QStringLiteral(
+                "未检测到 X11 显示环境 (DISPLAY 为空), 无法采集桌面。\n请选择本地媒体文件作为投屏源。"));
+            m_casting = false;
+            return;
+        }
     }
 
     const QString ip = findLanIp();
@@ -137,12 +148,24 @@ void CastController::startBrowserCasting(const CastOptions &opts)
     if (!opts.sourceFile.isEmpty())
         kind = classifyFile(opts.sourceFile);
 
-    if (kind == MediaKind::Screen && qgetenv("DISPLAY").isEmpty()) {
-        emit castError(QStringLiteral(
-            "未检测到 X11 显示环境 (DISPLAY 为空), 无法采集桌面。\n请选择本地媒体文件作为投屏源。"));
-        m_casting = false;
-        m_mode = Mode::None;
-        return;
+    if (kind == MediaKind::Screen) {
+        if (isWaylandSession()) {
+            if (!ffmpegSupportsPipewire()) {
+                emit castError(QStringLiteral(
+                    "检测到 Wayland 会话, 桌面采集需要 ffmpeg 支持 PipeWire。\n"
+                    "当前 ffmpeg 未编译 PipeWire 输入设备 (需要 ffmpeg >= 5.1 且 --enable-libpipewire)。\n"
+                    "请升级 ffmpeg 或选择本地媒体文件作为投屏源。"));
+                m_casting = false;
+                m_mode = Mode::None;
+                return;
+            }
+        } else if (qgetenv("DISPLAY").isEmpty()) {
+            emit castError(QStringLiteral(
+                "未检测到 X11 显示环境 (DISPLAY 为空), 无法采集桌面。\n请选择本地媒体文件作为投屏源。"));
+            m_casting = false;
+            m_mode = Mode::None;
+            return;
+        }
     }
 
     // 浏览器投屏监听所有网卡, 生成每个网卡对应的访问地址 (接收方任选其一)
@@ -312,10 +335,16 @@ QStringList CastController::buildFfmpegArgs(const CastOptions &o, MediaKind kind
     a << "-hide_banner" << "-loglevel" << "warning" << "-y";
 
     if (kind == MediaKind::Screen) {
-        a << "-f" << "x11grab"
-          << "-framerate" << QString::number(o.fps)
-          << "-draw_mouse" << "1"
-          << "-i" << QString::fromUtf8(qgetenv("DISPLAY"));
+        if (isWaylandSession()) {
+            // Wayland: 通过 PipeWire 采集桌面 (ffmpeg >= 5.1, 需 --enable-libpipewire)
+            a << "-f" << "pipewire" << "-i" << "0";
+        } else {
+            a << "-f" << "x11grab"
+              << "-framerate" << QString::number(o.fps)
+              << "-draw_mouse" << "1"
+              << "-i" << QString::fromUtf8(qgetenv("DISPLAY"));
+        }
+        // 音频: PipeWire 提供 pulse 兼容层, 继续使用 pulse 采集系统声音
         if (o.audio)
             a << "-f" << "pulse" << "-i" << detectMonitorSource();
     } else {
@@ -489,4 +518,29 @@ bool CastController::getMediaDimensions(const QString &file, int &width, int &he
     width = w;
     height = h;
     return true;
+}
+
+bool CastController::isWaylandSession()
+{
+    const QByteArray xdg = qgetenv("XDG_SESSION_TYPE").toLower();
+    if (xdg == "wayland")
+        return true;
+    // 部分环境未设置 XDG_SESSION_TYPE, 通过 QT_QPA_PLATFORM / WAYLAND_DISPLAY 判断
+    const QByteArray qpa = qgetenv("QT_QPA_PLATFORM").toLower();
+    if (qpa.contains("wayland"))
+        return true;
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && xdg != "x11")
+        return true;
+    return false;
+}
+
+bool CastController::ffmpegSupportsPipewire()
+{
+    QProcess p;
+    p.start("ffmpeg", QStringList() << "-hide_banner" << "-devices");
+    if (!p.waitForFinished(3000))
+        return false;
+    const QString out = QString::fromUtf8(p.readAllStandardOutput())
+                        + QString::fromUtf8(p.readAllStandardError());
+    return out.contains(QStringLiteral("pipewire"));
 }

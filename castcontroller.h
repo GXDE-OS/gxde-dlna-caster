@@ -44,6 +44,10 @@ private:
     static bool hasAudioTrack(const QString &file);
     // 用 ffprobe 获取视频宽高, 失败返回 (0,0)
     static bool getMediaDimensions(const QString &file, int &width, int &height);
+    // 检测当前会话是否为 Wayland (此时桌面采集需使用 PipeWire)
+    static bool isWaylandSession();
+    // 检测 ffmpeg 是否编译了 PipeWire 输入设备 (ffmpeg >= 5.1 --enable-libpipewire)
+    static bool ffmpegSupportsPipewire();
     QString detectMonitorSource();
     static QStringList findLanIps();
     static QString findLanIp();
