@@ -321,6 +321,7 @@ void MainWindow::buildUi()
 
     setCentralWidget(central);
     setMinimumSize(840, 640);
+    setEnableWindowBackground(true);
     resize(980, 720);
     titlebar()->setTitle(tr("GXDE DLNA Caster"));
 
