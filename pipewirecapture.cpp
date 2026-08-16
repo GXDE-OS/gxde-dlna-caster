@@ -8,12 +8,13 @@
 #include <QEventLoop>
 #include <QDateTime>
 #include <QDebug>
-
+#include <cerrno>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 
 #include <pipewire/pipewire.h>
+#include <pipewire/loop.h>
 #include <spa/param/video/format-utils.h>
 #include <spa/param/video/raw-utils.h>
 #include <spa/param/format.h>
@@ -41,7 +42,10 @@ struct PwCtx
     int height = 0;
     int stride = 0;
     int fifoFd = -1;
-    qint64 lastFrameMs = 0;
+    QByteArray latestFrame;
+    bool hasFrame = false;
+    qint64 lastSourceFrameMs = 0;
+    struct spa_source *timerSource = nullptr;
 };
 
 QString randomToken()
@@ -113,22 +117,43 @@ static void onStreamProcess(void *data)
                 pw_stream_queue_buffer(c->stream, b);
                 return;
             }
-            // 按目标帧率节流, 超出的帧直接丢弃
+
             const qint64 now = QDateTime::currentMSecsSinceEpoch();
-            if (now - c->lastFrameMs >= 1000 / qMax(1, c->fps)) {
-                c->lastFrameMs = now;
-                // 首次写帧: 打开 FIFO 写端 (阻塞直到 ffmpeg 打开读端)
-                if (c->fifoFd < 0) {
-                    const QByteArray path = c->fifoPath.toUtf8();
-                    c->fifoFd = ::open(path.constData(), O_WRONLY);
-                }
-                if (c->fifoFd >= 0) {
-                    ::write(c->fifoFd, frameData, size);
-                }
+            if (!c->hasFrame || now - c->lastSourceFrameMs >= 1000 / qMax(1, c->fps)) {
+                c->latestFrame = QByteArray(reinterpret_cast<const char *>(frameData), int(size));
+                c->hasFrame = true;
+                c->lastSourceFrameMs = now;
             }
         }
     }
     pw_stream_queue_buffer(c->stream, b);
+}
+
+static void onFrameTimer(void *data, uint64_t)
+{
+    auto *c = static_cast<PwCtx *>(data);
+    if (!c->hasFrame || c->latestFrame.isEmpty())
+        return;
+
+    if (c->fifoFd < 0) {
+        const QByteArray path = c->fifoPath.toUtf8();
+        c->fifoFd = ::open(path.constData(), O_WRONLY);
+        if (c->fifoFd < 0)
+            return;
+    }
+
+    const char *p = c->latestFrame.constData();
+    qsizetype remaining = c->latestFrame.size();
+    while (remaining > 0) {
+        const ssize_t n = ::write(c->fifoFd, p, size_t(remaining));
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            break;
+        }
+        p += n;
+        remaining -= n;
+    }
 }
 
 } // namespace
@@ -296,7 +321,6 @@ void PipeWireCapture::run()
                 targetNodeId = nodeId;
                 hasTargetNode = true;
             }
-            Q_UNUSED(props);
         }
         streams.endArray();
     }
@@ -389,10 +413,28 @@ void PipeWireCapture::run()
         return;
     }
 
+    const uint32_t frameIntervalNs = 1000000000u / uint32_t(qMax(1, m_fps));
+    struct timespec timerValue{};
+    struct timespec timerInterval{};
+    timerValue.tv_nsec = frameIntervalNs;
+    timerInterval.tv_nsec = frameIntervalNs;
+    ctx.timerSource = pw_loop_add_timer(pw_main_loop_get_loop(ctx.loop),
+                                        onFrameTimer, &ctx);
+    if (ctx.timerSource) {
+        pw_loop_update_timer(pw_main_loop_get_loop(ctx.loop), ctx.timerSource,
+                             &timerValue, &timerInterval, false);
+    } else {
+        qWarning() << "failed to create PipeWire frame timer";
+    }
+
     // 主循环 (阻塞, 直到 stopCapture 调用 quit)
     pw_main_loop_run(ctx.loop);
 
     // ---------- 3. 清理 ----------
+    if (ctx.timerSource) {
+        pw_loop_destroy_source(pw_main_loop_get_loop(ctx.loop), ctx.timerSource);
+        ctx.timerSource = nullptr;
+    }
     if (ctx.fifoFd >= 0)
         ::close(ctx.fifoFd);
     if (ctx.stream)
