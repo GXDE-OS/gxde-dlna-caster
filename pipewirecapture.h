@@ -36,6 +36,9 @@ private:
     // 调用 portal 方法并同步等待 Request.Response
     QVariantMap portalCall(const QString &method, const QVariantList &args);
 
+    // Accquire PipeWire file descriptor through ScreenCast.OpenPipeWireRemote
+    int openPipeWireRemote(const QString &sessionHandle);
+
     QString m_fifoPath;
     int m_fps = 30;
     volatile bool m_stop = false;

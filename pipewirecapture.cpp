@@ -17,6 +17,7 @@
 #include <spa/param/video/format-utils.h>
 #include <spa/param/video/raw-utils.h>
 #include <spa/param/format.h>
+#include <spa/param/buffers.h>
 #include <spa/pod/builder.h>
 #include <spa/debug/types.h>
 
@@ -38,6 +39,7 @@ struct PwCtx
     pw_stream *stream = nullptr;
     int width = 0;
     int height = 0;
+    int stride = 0;
     int fifoFd = -1;
     qint64 lastFrameMs = 0;
 };
@@ -64,7 +66,25 @@ static void onStreamParamChanged(void *data, uint32_t id, const spa_pod *param)
     if (info.info.raw.size.width > 0 && info.info.raw.size.height > 0) {
         c->width = int(info.info.raw.size.width);
         c->height = int(info.info.raw.size.height);
+        c->stride = c->width * 4;
         emit c->self->resolutionReady(c->width, c->height);
+
+        // P.W. needs to negotiate buffers, otherwise process callback won't be called.
+        // Here we ONLY accept the MEMFD buffer type so that we can write the frame data into FIFO directly.
+        uint8_t paramsBuffer[1024];
+        spa_pod_builder b = SPA_POD_BUILDER_INIT(paramsBuffer, sizeof(
+            paramsBuffer));
+        const spa_pod *params[1];
+        params[0] = static_cast<const spa_pod *>(spa_pod_builder_add_object(
+            &b, SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
+            SPA_PARAM_BUFFERS_buffers, SPA_POD_CHOICE_RANGE_Int(8, 1, 32),
+            SPA_PARAM_BUFFERS_blocks, SPA_POD_Int(1),
+            SPA_PARAM_BUFFERS_size, SPA_POD_Int(c->stride * c->height),
+            SPA_PARAM_BUFFERS_stride, SPA_POD_Int(c->stride),
+            SPA_PARAM_BUFFERS_align, SPA_POD_Int(16),
+            SPA_PARAM_BUFFERS_dataType,
+            SPA_POD_CHOICE_FLAGS_Int(1u << SPA_DATA_MemFd)));
+        pw_stream_update_params(c->stream, params, 1);
     }
 }
 
@@ -75,9 +95,24 @@ static void onStreamProcess(void *data)
     if (!b)
         return;
     spa_buffer *buf = b->buffer;
-    if (buf->datas && buf->datas[0].data && buf->datas[0].chunk) {
+    if (buf->datas && buf->datas[0].chunk) {
         const uint32_t size = buf->datas[0].chunk->size;
         if (size > 0) {
+            const uint8_t *frameData = static_cast<const uint8_t *>(buf->datas[0].data);
+            QByteArray fallback;
+            if (!frameData && buf->datas[0].type == SPA_DATA_MemFd
+                && buf->datas[0].fd >= 0 && buf->datas[0].chunk) {
+                fallback.resize(int(size));
+                const ssize_t n = ::pread(buf->datas[0].fd, fallback.data(), size,
+                    buf->datas[0].chunk->offset);
+                if (n == ssize_t(size)) {
+                    frameData = reinterpret_cast<const uint8_t *>(fallback.constData());
+                }
+            }
+            if (!frameData) {
+                pw_stream_queue_buffer(c->stream, b);
+                return;
+            }
             // 按目标帧率节流, 超出的帧直接丢弃
             const qint64 now = QDateTime::currentMSecsSinceEpoch();
             if (now - c->lastFrameMs >= 1000 / qMax(1, c->fps)) {
@@ -88,7 +123,7 @@ static void onStreamProcess(void *data)
                     c->fifoFd = ::open(path.constData(), O_WRONLY);
                 }
                 if (c->fifoFd >= 0) {
-                    ::write(c->fifoFd, buf->datas[0].data, size);
+                    ::write(c->fifoFd, frameData, size);
                 }
             }
         }
@@ -179,6 +214,38 @@ void PipeWireCapture::onPortalResponse(uint, const QVariantMap &results)
         m_pendingLoop->quit();
 }
 
+int PipeWireCapture::openPipeWireRemote(const QString &sessionHandle)
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString::fromLatin1(kPortalBus),
+        QString::fromLatin1(kPortalPath),
+        QString::fromLatin1(kScreenCastIface),
+        QStringLiteral("OpenPipeWireRemote"));
+    msg << QVariant::fromValue(QDBusObjectPath(sessionHandle)) << QVariantMap();
+
+    const QDBusMessage reply =
+        QDBusConnection::sessionBus().call(msg, QDBus::Block);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qWarning() << "Portal OpenPipeWireRemote failed:"
+            << reply.errorMessage();
+        return -1;
+    }
+    if (reply.arguments().isEmpty()) {
+        qWarning() << "Portal OpenPipeWireRemote returned no fd";
+        return -1;
+    }
+
+    const QDBusUnixFileDescriptor descriptor =
+        qdbus_cast<QDBusUnixFileDescriptor>(reply.arguments().first());
+    if (!descriptor.isValid() || descriptor.fileDescriptor() < 0) {
+        qWarning() << "Portal OpenPipeWireRemote returned invalid fd";
+        return -1;
+    }
+
+    // Duplicate the fd to avoid colsing the portal returned fd when QDBusUnixFileDescriptor is destructed
+    return ::dup(descriptor.fileDescriptor());
+}
+
 void PipeWireCapture::run()
 {
     // ---------- 1. xdg-desktop-portal ScreenCast 授权 ----------
@@ -203,45 +270,43 @@ void PipeWireCapture::run()
     selectOpts.insert(QStringLiteral("types"), uint(1));      // 1 = Monitor
     selectOpts.insert(QStringLiteral("multiple"), false);
     selectOpts.insert(QStringLiteral("cursor_mode"), uint(1)); // 光标嵌入画面
-    portalCall(QStringLiteral("SelectSources"), { sessionHandle, selectOpts });
+    portalCall(QStringLiteral("SelectSources"),
+               { QVariant::fromValue(QDBusObjectPath(sessionHandle)), selectOpts });
 
     QVariantMap startOpts;
     startOpts.insert(QStringLiteral("handle_token"), randomToken());
-    const QVariantMap startResult =
-        portalCall(QStringLiteral("Start"), { sessionHandle, QString(), startOpts });
+    const QVariantMap startResult = portalCall(
+        QStringLiteral("Start"),
+        { QVariant::fromValue(QDBusObjectPath(sessionHandle)), QString(), startOpts });
 
-    // 解析 streams: a(ua{sv}), fd 位于 props["fd"] (unix fd)
-    int pipewireFd = -1;
+    bool hasTargetNode = false;
+    uint32_t targetNodeId = 0;
     const QVariant streamsVar = startResult.value(QStringLiteral("streams"));
-    if (streamsVar.isValid()) {
-        QDBusArgument args = streamsVar.value<QDBusArgument>();
-        args.beginArray();
-        while (!args.atEnd()) {
-            args.beginStructure();
-            uint nodeId = 0;
+    if (streamsVar.canConvert<QDBusArgument>()) {
+        const QDBusArgument streams = streamsVar.value<QDBusArgument>();
+        streams.beginArray();
+        while (!streams.atEnd()) {
+            streams.beginStructure();
+            uint32_t nodeId = 0;
             QVariantMap props;
-            args >> nodeId;
-            args.beginMap();
-            while (!args.atEnd()) {
-                QString key;
-                QVariant val;
-                args.beginMapEntry();
-                args >> key >> val;
-                args.endMapEntry();
-                props.insert(key, val);
+            streams >> nodeId;
+            streams >> props;
+            streams.endStructure();
+            if (!hasTargetNode) {
+                targetNodeId = nodeId;
+                hasTargetNode = true;
             }
-            args.endMap();
-            args.endStructure();
-            Q_UNUSED(nodeId);
-            if (pipewireFd < 0 && props.contains(QStringLiteral("fd"))) {
-                pipewireFd =
-                    props.value(QStringLiteral("fd"))
-                        .value<QDBusUnixFileDescriptor>()
-                        .fileDescriptor();
-            }
+            Q_UNUSED(props);
         }
-        args.endArray();
+        streams.endArray();
     }
+    if (!hasTargetNode) {
+        qWarning() << "portal Start returned no usable node";
+    } else {
+        qInfo() << "portal screen cast target node:" << targetNodeId;
+    }
+
+    const int pipewireFd = openPipeWireRemote(sessionHandle);
     if (pipewireFd < 0) {
         emit captureError(tr("未从桌面门户获取到视频流"));
         m_running = false;
@@ -266,6 +331,7 @@ void PipeWireCapture::run()
     }
     // 连接到 portal 提供的独立 PipeWire 实例
     ctx.core = pw_context_connect_fd(ctx.context, ::dup(pipewireFd), nullptr, 0);
+    ::close(pipewireFd);
     if (!ctx.core) {
         emit captureError(tr("PipeWire 连接失败"));
         pw_context_destroy(ctx.context);
@@ -306,10 +372,12 @@ void PipeWireCapture::run()
         .param_changed = onStreamParamChanged,
         .process = onStreamProcess,
     };
-    pw_stream_add_listener(ctx.stream, nullptr, &events, &ctx);
+    spa_hook streamListener{};
+    pw_stream_add_listener(ctx.stream, &streamListener, &events, &ctx);
 
     const int flags = PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS;
-    if (pw_stream_connect(ctx.stream, PW_DIRECTION_INPUT, PW_ID_ANY,
+    if (pw_stream_connect(ctx.stream, PW_DIRECTION_INPUT,
+                          hasTargetNode ? targetNodeId : PW_ID_ANY,
                           static_cast<pw_stream_flags>(flags), params, 1) < 0) {
         emit captureError(tr("PipeWire 流连接失败"));
         pw_stream_destroy(ctx.stream);
