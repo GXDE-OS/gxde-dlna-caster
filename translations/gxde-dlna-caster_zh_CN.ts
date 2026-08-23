@@ -134,8 +134,8 @@
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="336"/>
-        <source>启用系统托盘</source>
-        <translation>启用系统托盘</translation>
+        <source>关闭后隐藏到托盘</source>
+        <translation>关闭后隐藏到托盘</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="365"/>
@@ -291,7 +291,7 @@
     <message>
         <location filename="../mainwindow.cpp" line="325"/>
         <source>GXDE DLNA Caster</source>
-        <translation>GXDE投屏工具</translation>
+        <translation>GXDE 投屏工具</translation>
     </message>
 </context>
 </TS>

@@ -1,3 +1,10 @@
+gxde-dlna-caster (1.5.4) UNRELEASED; urgency=medium
+
+  * 修复中文名称中 GXDE 与 投屏工具 之间缺少空格的问题
+    (desktop 文件 Name[zh_*] 及应用界面标题栏)
+
+ -- shenmo <shenmo@spark-app.store>  Sun, 23 Aug 2026 12:00:00 +0800
+
 gxde-dlna-caster (1.5.3) UNRELEASED; urgency=medium
 
   * Wayland 桌面采集统一通过 xdg-desktop-portal 授权 (portal ScreenCast),

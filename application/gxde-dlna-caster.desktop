@@ -2,9 +2,9 @@
 Type=Application
 Version=1.0
 Name=GXDE DLNA Caster
-Name[zh_CN]=GXDE投屏工具
-Name[zh_HK]=GXDE投屏工具
-Name[zh_TW]=GXDE投屏工具
+Name[zh_CN]=GXDE 投屏工具
+Name[zh_HK]=GXDE 投屏工具
+Name[zh_TW]=GXDE 投屏工具
 GenericName=DLNA Cast
 GenericName[zh_CN]=DLNA投屏
 GenericName[zh_HK]=DLNA投屏

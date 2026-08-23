@@ -330,33 +330,21 @@ void MainWindow::buildUi()
     buildTitleMenu();
 }
 
-// 标题栏菜单 (DTK 自带): 提供托盘开关等全局选项
+// 标题栏菜单 (DTK 自带): 提供关闭行为等全局选项 (系统托盘始终启用)
 void MainWindow::buildTitleMenu()
 {
     auto *menu = new QMenu(this);
-    QAction *trayAct = menu->addAction(tr("启用系统托盘"));
+    QAction *trayAct = menu->addAction(tr("关闭后隐藏到托盘"));
     trayAct->setCheckable(true);
-    trayAct->setChecked(m_trayEnabled);
+    trayAct->setChecked(m_closeToTray);
     m_trayMenuAct = trayAct;
     connect(trayAct, &QAction::toggled, this, [this](bool on) {
-        m_trayEnabled = on;
-        applyTrayEnabled();
+        m_closeToTray = on;
+        if (m_trayMenuAct)
+            m_trayMenuAct->setChecked(m_closeToTray);
         saveSettings();
     });
     titlebar()->setMenu(menu);
-}
-
-// 根据 m_trayEnabled 显示/隐藏托盘图标, 并同步菜单勾选状态
-void MainWindow::applyTrayEnabled()
-{
-    if (m_tray) {
-        if (m_trayEnabled)
-            m_tray->show();
-        else
-            m_tray->hide();
-    }
-    if (m_trayMenuAct)
-        m_trayMenuAct->setChecked(m_trayEnabled);
 }
 
 // 首次关闭窗口时弹窗询问关闭行为
@@ -457,11 +445,9 @@ void MainWindow::loadSettings()
         m_bitrateCombo->setCurrentText(bitrate);
     m_portSpin->setValue(s.value(QStringLiteral("port"), 8090).toInt());
     m_audioCheck->setChecked(s.value(QStringLiteral("audio"), true).toBool());
-    // 托盘与关闭行为设置
-    m_trayEnabled = s.value(QStringLiteral("tray_enabled"), true).toBool();
+    // 关闭行为设置
     m_closeToTray = s.value(QStringLiteral("close_to_tray"), true).toBool();
     m_closeAsked = s.value(QStringLiteral("close_to_tray_asked"), false).toBool();
-    applyTrayEnabled();
     m_loadingSettings = false;
     onSourceChanged(m_sourceCombo->currentIndex());
 }
@@ -478,7 +464,6 @@ void MainWindow::saveSettings()
     s.setValue(QStringLiteral("bitrate"), m_bitrateCombo->currentText());
     s.setValue(QStringLiteral("port"), m_portSpin->value());
     s.setValue(QStringLiteral("audio"), m_audioCheck->isChecked());
-    s.setValue(QStringLiteral("tray_enabled"), m_trayEnabled);
     s.setValue(QStringLiteral("close_to_tray"), m_closeToTray);
     s.setValue(QStringLiteral("close_to_tray_asked"), m_closeAsked);
 }
@@ -494,18 +479,14 @@ void MainWindow::closeEvent(QCloseEvent *event)
         return;
     }
 
-    // 托盘未启用: 关闭即退出
-    if (!m_trayEnabled || !m_tray || !m_tray->isVisible()) {
-        m_controller.stopCasting();
-        DMainWindow::closeEvent(event);
-        return;
-    }
-
-    // 首次关闭: 弹窗询问关闭行为 (最小化到托盘 / 直接退出)
+    // 系统托盘始终启用; 首次关闭时弹窗询问关闭行为 (最小化到托盘 / 直接退出)
     if (!m_closeAsked && !askCloseBehavior()) {
         event->ignore();  // 用户取消关闭
         return;
     }
+    // 同步标题栏菜单勾选状态 (首次询问可能改变了关闭行为)
+    if (m_trayMenuAct)
+        m_trayMenuAct->setChecked(m_closeToTray);
 
     if (m_closeToTray) {
         hide();

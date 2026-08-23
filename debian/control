@@ -21,7 +21,7 @@ Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends},
  ffmpeg
 Description: Cast your desktop screen and audio to DLNA TVs
- GXDE DLNA Caster (GXDE投屏工具) casts the Linux desktop screen,
+ GXDE DLNA Caster (GXDE 投屏工具) casts the Linux desktop screen,
  desktop audio, or local media files to DLNA/UPnP media renderers
  such as Android TVs and set-top boxes.
  .

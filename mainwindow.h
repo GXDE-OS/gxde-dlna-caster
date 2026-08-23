@@ -50,7 +50,6 @@ private:
     void buildUi();
     void buildTrayIcon();
     void buildTitleMenu();
-    void applyTrayEnabled();
     // 首次关闭时询问关闭行为 (最小化到托盘 / 直接退出); 返回 true 表示允许继续关闭
     bool askCloseBehavior();
     void appendLog(const QString &msg);
@@ -67,11 +66,10 @@ private:
     // 系统托盘 (后台运行)
     QSystemTrayIcon *m_tray = nullptr;
     bool m_quitRequested = false;
-    // 托盘与关闭行为设置 (QSettings 持久化)
-    bool m_trayEnabled = true;    // 是否启用系统托盘
+    // 关闭行为设置 (QSettings 持久化)
     bool m_closeToTray = true;    // 关闭窗口时最小化到托盘 (否则直接退出)
     bool m_closeAsked = false;    // 是否已询问过关闭行为
-    QAction *m_trayMenuAct = nullptr;  // 标题栏菜单中托盘选项, 用于同步勾选状态
+    QAction *m_trayMenuAct = nullptr;  // 标题栏菜单中"关闭后隐藏到托盘"选项, 用于同步勾选状态
 
     // 侧边栏导航
     QListWidget *m_navList = nullptr;

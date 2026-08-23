@@ -133,7 +133,7 @@
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="336"/>
-        <source>启用系统托盘</source>
+        <source>关闭后隐藏到托盘</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
