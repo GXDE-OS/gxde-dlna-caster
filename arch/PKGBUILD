@@ -8,7 +8,7 @@ url="https://github.com/GXDE-OS/gxde-dlna-caster"
 license=('GPL-3.0-or-later')
 # 运行时调用 ffmpeg 编码、pactl 设置音频源 ・ Runs ffmpeg for encoding and pactl to pick the audio source.
 depends=('dtk2widget-qt6-git' 'dtk6core-git' 'qt6-base' 'qt6-websockets' 'libpipewire' 'ffmpeg' 'libpulse' 'hicolor-icon-theme' 'libgcc' 'libstdc++' 'glibc')
-makedepends=('git' 'cmake' 'ninja' 'pkgconf' 'qt6-tools')
+makedepends=('git' 'cmake' 'ninja' 'pkgconf' 'qt6-tools' 'dtk6gui-git' 'dtk6log-git')
 provides=('gxde-dlna-caster')
 conflicts=('gxde-dlna-caster')
 source=()
