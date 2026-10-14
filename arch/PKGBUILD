@@ -1,0 +1,31 @@
+# Maintainer: CharOfString <root@charofstring.cc>
+pkgname=gxde-dlna-caster-git
+pkgver=1.5.4
+pkgrel=1
+pkgdesc='Cast your desktop screen and audio to DLNA TVs'
+arch=('x86_64' 'aarch64')
+url="https://github.com/GXDE-OS/gxde-dlna-caster"
+license=('GPL-3.0-or-later')
+# 运行时调用 ffmpeg 编码、pactl 设置音频源 ・ Runs ffmpeg for encoding and pactl to pick the audio source.
+depends=('dtk2widget-qt6-git' 'dtk6core-git' 'qt6-base' 'qt6-websockets' 'libpipewire' 'ffmpeg' 'libpulse' 'hicolor-icon-theme' 'libgcc' 'libstdc++' 'glibc')
+makedepends=('git' 'cmake' 'ninja' 'pkgconf' 'qt6-tools')
+provides=('gxde-dlna-caster')
+conflicts=('gxde-dlna-caster')
+source=()
+sha512sums=()
+
+# 直接使用 PKGBUILD 所在的 git 仓库作为源码 ・ Build from the git checkout this PKGBUILD lives in.
+_srcroot() {
+  git -C "$startdir" rev-parse --show-toplevel
+}
+
+build() {
+  cmake -B build -S "$(_srcroot)" -GNinja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr
+  ninja -C build
+}
+
+package() {
+  DESTDIR="$pkgdir" ninja -C build install
+}
